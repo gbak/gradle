@@ -228,7 +228,13 @@ public class XCTestConventionPlugin implements Plugin<ProjectInternal> {
 
                 // Configure test suite link task from tested component compiled objects
                 AbstractLinkTask linkTest = tasks.withType(AbstractLinkTask.class).getByName("linkTest");
-                linkTest.source(testedComponent.getDevelopmentBinary().getObjects());
+                Spec<File> ignoreMainObject = new Spec<File>() {
+                    @Override
+                    public boolean isSatisfiedBy(File element) {
+                        return !element.getName().equals("main.o");
+                    }
+                };
+                linkTest.source(testedComponent.getDevelopmentBinary().getObjects().filter(ignoreMainObject));
 
                 if (OperatingSystem.current().isLinux()) {
                     tasks.withType(RunTestExecutable.class).getByName("xcTest")
