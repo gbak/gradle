@@ -19,7 +19,6 @@ package org.gradle.binarycompatibility.rules
 import japicmp.model.JApiCompatibilityChange
 
 import me.champeau.gradle.japicmp.report.Violation
-import japicmp.model.JApiClass
 import javassist.CtClass
 import com.google.common.base.Optional
 
@@ -27,7 +26,6 @@ import com.google.common.base.Optional
 class MethodsRemovedInInternalSuperClassRuleTest extends AbstractContextAwareRuleSpecification {
     MethodsRemovedInInternalSuperClassRule rule = new MethodsRemovedInInternalSuperClassRule([:])
 
-    JApiClass apiClass = Stub(JApiClass)
 
     static class OldSuperInternal {
         public void publicMethod() {}
@@ -83,6 +81,6 @@ class MethodsRemovedInInternalSuperClassRuleTest extends AbstractContextAwareRul
         apiClass.compatibilityChanges >> [JApiCompatibilityChange.METHOD_REMOVED_IN_SUPERCLASS]
 
         expect:
-        rule.maybeViolation(apiClass) == null
+        noViolation(rule)
     }
 }

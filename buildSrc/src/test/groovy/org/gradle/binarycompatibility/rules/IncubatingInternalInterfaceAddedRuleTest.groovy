@@ -24,7 +24,6 @@ import japicmp.model.JApiImplementedInterface
 import japicmp.model.JApiChangeStatus
 import org.gradle.api.Incubating
 import me.champeau.gradle.japicmp.report.Violation
-import japicmp.model.JApiClass
 import javassist.CtClass
 
 import com.google.common.base.Optional
@@ -48,7 +47,7 @@ class IncubatingInternalInterfaceAddedRuleTest extends AbstractContextAwareRuleS
 
     interface InternalInterface {}
 
-    interface UnusedInterface {}
+    interface StablePublicInterface {}
 
     CtClass oldBase
     CtClass newBase
@@ -56,9 +55,7 @@ class IncubatingInternalInterfaceAddedRuleTest extends AbstractContextAwareRuleS
     CtClass newIncubatingBase
     CtClass internalInterface
     CtClass incubatingInterface
-    CtClass unusedInterface
-
-    JApiClass apiClass = Stub(JApiClass)
+    CtClass stablePublicInterface
 
     Map interfaces
 
@@ -71,7 +68,7 @@ class IncubatingInternalInterfaceAddedRuleTest extends AbstractContextAwareRuleS
         newIncubatingBase = instanceScopedPool.get(NewIncubatingBase.name)
         internalInterface = instanceScopedPool.get(InternalInterface.name)
         incubatingInterface = instanceScopedPool.get(IncubatingInterface.name)
-        unusedInterface = instanceScopedPool.get(UnusedInterface.name)
+        stablePublicInterface = instanceScopedPool.get(StablePublicInterface.name)
 
         apiClass.changeStatus >> JApiChangeStatus.MODIFIED
         apiClass.oldClass >> Optional.of(oldBase)
@@ -86,23 +83,23 @@ class IncubatingInternalInterfaceAddedRuleTest extends AbstractContextAwareRuleS
     @Unroll
     def "#member change should not be reported"() {
         expect:
-        rule.maybeViolation(apiClass) == null
+        noViolation(rule)
 
         where:
         member << [Mock(JApiMethod), Mock(JApiField), Mock(JApiImplementedInterface), Mock(JApiConstructor)]
     }
 
-    def "nothing be reported if no changes"() {
+    def "nothing should be reported if no changes"() {
         expect:
-        rule.maybeViolation(apiClass) == null
+        noViolation(rule)
     }
 
-    def "nothing be reported if new interface is neither internal nor incubating"() {
+    def "nothing should be reported if new interface is neither internal nor incubating"() {
         when:
-        newBase.addInterface(unusedInterface)
+        newBase.addInterface(stablePublicInterface)
 
         then:
-        rule.maybeViolation(apiClass) == null
+        noViolation(rule)
     }
 
     def 'adding an #type interface can be reported'() {
@@ -127,7 +124,7 @@ class IncubatingInternalInterfaceAddedRuleTest extends AbstractContextAwareRuleS
         newSuper.addInterface(incubatingInterface)
 
         expect:
-        rule.maybeViolation(apiClass) == null
+        noViolation(rule)
     }
 
     def "adding an #type interface to super class would not be reported"() {
@@ -135,7 +132,7 @@ class IncubatingInternalInterfaceAddedRuleTest extends AbstractContextAwareRuleS
         newSuper.addInterface(interfaces[type])
 
         expect:
-        rule.maybeViolation(apiClass) == null
+        noViolation(rule)
 
         where:
         type << ['internal', 'incubating']

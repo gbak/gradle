@@ -62,7 +62,7 @@ class MethodsRemovedInInternalSuperClassRule extends AbstractSuperClassChangesRu
             return
         }
 
-        result.addAll(c.declaredMethods.grep { isPublicApi(it) })
+        result.addAll(c.declaredMethods.findAll { isPublicApi(it) })
 
         collect(result, c.superclass)
     }
@@ -72,7 +72,7 @@ class MethodsRemovedInInternalSuperClassRule extends AbstractSuperClassChangesRu
     }
 
     private List<String> filterChangesToReport(CtClass c, Set<CtMethod> methods) {
-        return methods.grep { isTopDeclaration(it, c) }.collect { it.longName }.sort()
+        return methods.findAll { isTopDeclaration(it, c) }*.longName.sort()
     }
 
     private boolean declaredInInternalClass(CtMethod method) {

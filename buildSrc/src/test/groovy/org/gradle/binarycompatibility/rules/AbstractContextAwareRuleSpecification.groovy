@@ -19,6 +19,7 @@ package org.gradle.binarycompatibility.rules
 import me.champeau.gradle.japicmp.report.ViolationCheckContext
 import spock.lang.Specification
 import javassist.ClassPool
+import japicmp.model.JApiClass
 
 
 abstract class AbstractContextAwareRuleSpecification extends Specification {
@@ -40,7 +41,13 @@ abstract class AbstractContextAwareRuleSpecification extends Specification {
 
     ClassPool instanceScopedPool = new ClassPool()
 
+    JApiClass apiClass = Stub(JApiClass)
+
     def setup() {
         instanceScopedPool.appendSystemPath()
+    }
+
+    boolean noViolation(def rule){
+        rule.maybeViolation(apiClass) == null
     }
 }
