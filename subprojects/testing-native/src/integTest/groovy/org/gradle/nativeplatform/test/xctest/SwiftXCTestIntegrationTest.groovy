@@ -23,6 +23,7 @@ import org.gradle.nativeplatform.fixtures.AbstractInstalledToolChainIntegrationS
 import org.gradle.nativeplatform.fixtures.NativeBinaryFixture
 import org.gradle.nativeplatform.fixtures.app.IncrementalSwiftXCTestAddDiscoveryBundle
 import org.gradle.nativeplatform.fixtures.app.IncrementalSwiftXCTestRemoveDiscoveryBundle
+import org.gradle.nativeplatform.fixtures.app.SwiftAppTest
 import org.gradle.nativeplatform.fixtures.app.SwiftAppWithLibraries
 import org.gradle.nativeplatform.fixtures.app.SwiftAppWithSingleXCTestSuite
 import org.gradle.nativeplatform.fixtures.app.SwiftAppWithXCTest
@@ -30,6 +31,7 @@ import org.gradle.nativeplatform.fixtures.app.SwiftFailingXCTestBundle
 import org.gradle.nativeplatform.fixtures.app.SwiftLib
 import org.gradle.nativeplatform.fixtures.app.SwiftLibTest
 import org.gradle.nativeplatform.fixtures.app.SwiftLibWithXCTest
+import org.gradle.nativeplatform.fixtures.app.SwiftSingleFileApp
 import org.gradle.nativeplatform.fixtures.app.SwiftSingleFileLibWithSingleXCTestSuite
 import org.gradle.nativeplatform.fixtures.app.XCTestCaseElement
 import org.gradle.nativeplatform.fixtures.app.XCTestSourceElement
@@ -310,8 +312,8 @@ apply plugin: 'swift-executable'
         succeeds("test")
 
         then:
-        result.assertTasksExecuted(":compileDebugSwift", ":compileTestSwift", ":linkTest", bundleOrInstallTask(), ":xcTest", ":test")
-        result.assertTasksSkipped(":compileDebugSwift", ":compileTestSwift", ":linkTest", bundleOrInstallTask(), ":xcTest", ":test")
+        result.assertTasksExecuted(":compileDebugSwift", ":compileTestSwift", ":relocateMainForTest", ":linkTest", bundleOrInstallTask(), ":xcTest", ":test")
+        result.assertTasksSkipped(":compileDebugSwift", ":compileTestSwift", ":relocateMainForTest", ":linkTest", bundleOrInstallTask(), ":xcTest", ":test")
     }
 
     // TODO: Need to support test report for test case assertion
@@ -329,9 +331,30 @@ apply plugin: 'swift-executable'
         succeeds("test")
 
         then:
-        result.assertTasksExecuted(":compileDebugSwift", ":compileTestSwift", ":linkTest", bundleOrInstallTask(), ":xcTest", ":test")
+        result.assertTasksExecuted(":compileDebugSwift", ":compileTestSwift", ":relocateMainForTest", ":linkTest", bundleOrInstallTask(), ":xcTest", ":test")
         app.assertTestCasesRan(testExecutionResult)
     }
+
+    @Requires(TestPrecondition.MAC_OS_X)
+    def "can test public and internal features of a Swift executable with a single source file"() {
+        given:
+        def main = new SwiftSingleFileApp()
+        def test = new SwiftAppTest(main, main.greeter, main.sum, main.multiply).withInfoPlist()
+        settingsFile << "rootProject.name = '${main.projectName}'"
+        buildFile << """
+apply plugin: 'swift-executable'
+"""
+        main.writeToProject(testDirectory)
+        test.writeToProject(testDirectory)
+
+        when:
+        succeeds("test")
+
+        then:
+        result.assertTasksExecuted(":compileDebugSwift", ":compileTestSwift", ":relocateMainForTest", ":linkTest", bundleOrInstallTask(), ":xcTest", ":test")
+        test.assertTestCasesRan(testExecutionResult)
+    }
+
 
     // TODO: Need to support test report for test case assertion
     @Requires(TestPrecondition.MAC_OS_X)
@@ -348,7 +371,7 @@ apply plugin: 'swift-executable'
         succeeds("test")
 
         then:
-        result.assertTasksExecuted(":compileDebugSwift", ":compileTestSwift", ":linkTest", bundleOrInstallTask(), ":xcTest", ":test")
+        result.assertTasksExecuted(":compileDebugSwift", ":compileTestSwift", ":relocateMainForTest", ":linkTest", bundleOrInstallTask(), ":xcTest", ":test")
         assertMainSymbolIsAbsent(objectFiles(app.test, "build/obj/test"))
         app.assertTestCasesRan(testExecutionResult)
     }
@@ -510,7 +533,7 @@ apply plugin: 'swift-library'
         result.assertTasksExecuted(
             ':log:compileDebugSwift', ':log:linkDebug',
             ':hello:compileDebugSwift', ':hello:linkDebug',
-            ':compileDebugSwift', ':compileTestSwift', ':linkTest', bundleOrInstallTask(), ':xcTest', ':test')
+            ':compileDebugSwift', ':compileTestSwift', ":relocateMainForTest", ':linkTest', bundleOrInstallTask(), ':xcTest', ':test')
     }
 
     def 'can run xctest in swift package manager layout'() {
@@ -583,7 +606,7 @@ apply plugin: 'swift-library'
         result.assertTasksExecuted(
             ':log:compileDebugSwift', ':log:linkDebug',
             ':hello:compileDebugSwift', ':hello:linkDebug',
-            ':compileDebugSwift', ':compileTestSwift', ':linkTest', bundleOrInstallTask(), ':xcTest', ':test')
+            ':compileDebugSwift', ':compileTestSwift', ":relocateMainForTest", ':linkTest', bundleOrInstallTask(), ':xcTest', ':test')
     }
 
     private static void assertMainSymbolIsAbsent(List<NativeBinaryFixture> binaries) {
@@ -593,7 +616,7 @@ apply plugin: 'swift-library'
     }
 
     private static void assertMainSymbolIsAbsent(NativeBinaryFixture binary) {
-        assert !binary.binaryInfo.listSymbols().contains('_main')
+        assert binary.binaryInfo.listSymbols().every { it.name != '_main' }
     }
 
     TestExecutionResult getTestExecutionResult() {
