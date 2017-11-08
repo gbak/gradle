@@ -23,6 +23,9 @@ import org.gradle.test.fixtures.ivy.IvyFileRepository
 import org.gradle.test.fixtures.ivy.IvyRepository
 import org.gradle.test.fixtures.maven.MavenRepository
 import org.gradle.test.fixtures.plugin.PluginBuilder
+import org.gradle.test.fixtures.plugin.PluginResolutionFailure
+import org.gradle.util.Requires
+import org.gradle.util.TestPrecondition
 
 @LeaksFileHandles
 class ResolvingWithPluginManagementSpec extends AbstractDependencyResolutionTest {
@@ -38,7 +41,7 @@ class ResolvingWithPluginManagementSpec extends AbstractDependencyResolutionTest
         def taskName = "pluginTask"
 
         pluginBuilder.addPluginWithPrintlnTask(taskName, message, "org.example.plugin")
-        if(repository instanceof  MavenRepository) {
+        if (repository instanceof MavenRepository) {
             pluginBuilder.publishAs("org.example.plugin:plugin:1.0", repository, executer)
         } else if (repository instanceof IvyRepository) {
             pluginBuilder.publishAs("org.example.plugin:plugin:1.0", repository, executer)
@@ -57,6 +60,7 @@ class ResolvingWithPluginManagementSpec extends AbstractDependencyResolutionTest
           }
         """
     }
+
     def 'setting different version in resolutionStrategy will affect plugin choice'() {
         given:
         publishTestPlugin()
@@ -307,6 +311,7 @@ class ResolvingWithPluginManagementSpec extends AbstractDependencyResolutionTest
         failureDescriptionContains("Cannot change the plugin resolution strategy after projects have been loaded.")
     }
 
+    @Requires(TestPrecondition.ONLINE)
     def "fails build for unresolvable custom artifact"() {
         given:
         buildScript helloWorldPlugin('0.2')
@@ -328,9 +333,11 @@ class ResolvingWithPluginManagementSpec extends AbstractDependencyResolutionTest
         fails("helloWorld")
 
         then:
-        errorOutput.contains("Could not resolve plugin artifact 'foo:bar:1.0'")
+        new PluginResolutionFailure(failure, "org.gradle.hello-world", "0.2", "foo:bar:1.0")
+            .assertIsArtifactResolutionFailure()
     }
 
+    @Requires(TestPrecondition.ONLINE)
     def "succeeds build for resolvable custom artifact"() {
         given:
         buildScript helloWorldPlugin('0.2')

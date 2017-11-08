@@ -15,16 +15,20 @@
  */
 package org.gradle.plugin.use.resolve.internal;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.ModuleDependency;
 import org.gradle.api.artifacts.ModuleVersionSelector;
-import org.gradle.api.artifacts.repositories.ArtifactRepository;
+import org.gradle.api.artifacts.ResolveException;
+import org.gradle.api.artifacts.ResolvedConfiguration;
+import org.gradle.api.artifacts.dsl.RepositoryHandler;
 import org.gradle.api.internal.artifacts.DependencyResolutionServices;
 import org.gradle.api.internal.artifacts.dependencies.DefaultExternalModuleDependency;
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.VersionSelectorScheme;
+import org.gradle.internal.exceptions.DefaultMultiCauseException;
 import org.gradle.plugin.management.internal.InvalidPluginRequestException;
 import org.gradle.plugin.management.internal.PluginRequestInternal;
 import org.gradle.plugin.use.PluginId;
@@ -37,9 +41,13 @@ public class ArtifactRepositoriesPluginResolver implements PluginResolver {
 
     public static final String PLUGIN_MARKER_SUFFIX = ".gradle.plugin";
 
+    @VisibleForTesting
+    static final String SOURCE_NAME = "Plugins Repositories";
+
     public static ArtifactRepositoriesPluginResolver createWithDefaults(DependencyResolutionServices dependencyResolutionServices, VersionSelectorScheme versionSelectorScheme) {
-        if (dependencyResolutionServices.getResolveRepositoryHandler().isEmpty()) {
-            dependencyResolutionServices.getResolveRepositoryHandler().gradlePluginPortal();
+        RepositoryHandler repositories = dependencyResolutionServices.getResolveRepositoryHandler();
+        if (repositories.isEmpty()) {
+            repositories.gradlePluginPortal();
         }
         return new ArtifactRepositoriesPluginResolver(dependencyResolutionServices, versionSelectorScheme);
     }
@@ -47,7 +55,8 @@ public class ArtifactRepositoriesPluginResolver implements PluginResolver {
     private final DependencyResolutionServices resolution;
     private final VersionSelectorScheme versionSelectorScheme;
 
-    public ArtifactRepositoriesPluginResolver(DependencyResolutionServices dependencyResolutionServices, VersionSelectorScheme versionSelectorScheme) {
+    @VisibleForTesting
+    ArtifactRepositoriesPluginResolver(DependencyResolutionServices dependencyResolutionServices, VersionSelectorScheme versionSelectorScheme) {
         this.resolution = dependencyResolutionServices;
         this.versionSelectorScheme = versionSelectorScheme;
     }
@@ -71,40 +80,31 @@ public class ArtifactRepositoriesPluginResolver implements PluginResolver {
             return;
         }
 
-        if (exists(markerDependency)) {
-            handleFound(pluginRequest, markerDependency, result);
+        ResolvedConfiguration resolved = resolvedConfigurationFor(markerDependency);
+        if (resolved.hasError()) {
+            handleNotFound(result, markerDependency, resolved);
         } else {
-            handleNotFound(result, "Could not resolve plugin artifact '" + getNotation(markerDependency) + "'");
+            handleFound(pluginRequest, markerDependency, result);
         }
-    }
-
-    private void handleFound(final PluginRequestInternal pluginRequest, final Dependency markerDependency, PluginResolutionResult result) {
-        result.found("Plugin Repositories", new PluginResolution() {
-            @Override
-            public PluginId getPluginId() {
-                return pluginRequest.getId();
-            }
-
-            public void execute(@Nonnull PluginResolveContext context) {
-                context.addLegacy(pluginRequest.getId(), markerDependency);
-            }
-        });
     }
 
     private void handleNotFound(PluginResolutionResult result, String message) {
-        for (ArtifactRepository repository : resolution.getResolveRepositoryHandler()) {
-            result.notFound(repository.getName(), message);
-        }
+        result.notFound(SOURCE_NAME, message);
     }
 
-    /*
-     * Checks whether the plugin marker artifact exists in the backing artifacts repositories.
-     */
-    private boolean exists(ModuleDependency dependency) {
+    private void handleNotFound(PluginResolutionResult result, ModuleDependency markerDependency, ResolvedConfiguration resolved) {
+        result.notFound(SOURCE_NAME, "could not resolve plugin artifacts", new ResolutionFailureProvider(markerDependency, resolved));
+    }
+
+    private void handleFound(PluginRequestInternal pluginRequest, Dependency markerDependency, PluginResolutionResult result) {
+        result.found(SOURCE_NAME, new ArtifactPluginResolution(pluginRequest.getId(), markerDependency));
+    }
+
+    private ResolvedConfiguration resolvedConfigurationFor(ModuleDependency dependency) {
         ConfigurationContainer configurations = resolution.getConfigurationContainer();
         Configuration configuration = configurations.detachedConfiguration(dependency);
         configuration.setTransitive(false);
-        return !configuration.getResolvedConfiguration().hasError();
+        return configuration.getResolvedConfiguration();
     }
 
     private ModuleDependency getMarkerDependency(PluginRequestInternal pluginRequest) {
@@ -117,7 +117,49 @@ public class ArtifactRepositoriesPluginResolver implements PluginResolver {
         }
     }
 
-    private String getNotation(Dependency dependency) {
-        return Joiner.on(':').join(dependency.getGroup(), dependency.getName(), dependency.getVersion());
+    private static class ArtifactPluginResolution implements PluginResolution {
+
+        private final PluginId pluginId;
+        private final Dependency markerDependency;
+
+        private ArtifactPluginResolution(PluginId pluginId, Dependency markerDependency) {
+            this.pluginId = pluginId;
+            this.markerDependency = markerDependency;
+        }
+
+        @Override
+        public PluginId getPluginId() {
+            return pluginId;
+        }
+
+        @Override
+        public void execute(@Nonnull PluginResolveContext context) {
+            context.addLegacy(pluginId, markerDependency);
+        }
+    }
+
+    private static class ResolutionFailureProvider implements PluginResolutionResult.FailureProvider {
+
+        private final ModuleDependency markerDependency;
+        private final ResolvedConfiguration resolved;
+
+        private ResolutionFailureProvider(ModuleDependency markerDependency, ResolvedConfiguration resolved) {
+            this.markerDependency = markerDependency;
+            this.resolved = resolved;
+        }
+
+        @Override
+        public Throwable getFailure() {
+            try {
+                resolved.rethrowFailure();
+                throw new IllegalStateException("Failed resolved configuration didn't throw, this should never happen");
+            } catch (ResolveException ex) {
+                return new DefaultMultiCauseException(getNotation(markerDependency), ex.getCauses());
+            }
+        }
+
+        private String getNotation(Dependency dependency) {
+            return Joiner.on(':').join(dependency.getGroup(), dependency.getName(), dependency.getVersion());
+        }
     }
 }

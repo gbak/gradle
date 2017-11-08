@@ -16,9 +16,6 @@
 
 package org.gradle.plugin.use.resolve.internal
 
-import org.gradle.api.artifacts.dsl.RepositoryHandler
-import org.gradle.api.artifacts.repositories.ArtifactRepository
-import org.gradle.api.internal.artifacts.DependencyResolutionServices
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.DefaultVersionSelectorScheme
 import org.gradle.api.internal.artifacts.ivyservice.ivyresolve.strategy.MavenVersionSelectorScheme
 import org.gradle.groovy.scripts.StringScriptSource
@@ -27,20 +24,13 @@ import org.gradle.plugin.management.internal.PluginRequestInternal
 import org.gradle.plugin.use.internal.DefaultPluginId
 import spock.lang.Specification
 
+import static org.gradle.plugin.use.resolve.internal.ArtifactRepositoriesPluginResolver.SOURCE_NAME
+
 class ArtifactRepositoriesPluginResolverTest extends Specification {
     def versionSelectorScheme = new MavenVersionSelectorScheme(new DefaultVersionSelectorScheme())
-    def repository = Mock(ArtifactRepository) {
-        getName() >> "maven"
-    }
-    def repositories = Mock(RepositoryHandler) {
-        iterator() >> [repository].iterator()
-    }
-    def resolution = Mock(DependencyResolutionServices) {
-        getResolveRepositoryHandler() >> repositories
-    }
     def result = Mock(PluginResolutionResult)
 
-    def resolver = new ArtifactRepositoriesPluginResolver(resolution, versionSelectorScheme)
+    def resolver = new ArtifactRepositoriesPluginResolver(null, versionSelectorScheme)
 
     PluginRequestInternal request(String id, String version = null) {
         new DefaultPluginRequest(DefaultPluginId.of(id), version, true, 1, new StringScriptSource("test", "test"))
@@ -51,7 +41,7 @@ class ArtifactRepositoriesPluginResolverTest extends Specification {
         resolver.resolve(request("plugin"), result)
 
         then:
-        1 * result.notFound("maven", "plugin dependency must include a version number for this source")
+        1 * result.notFound(SOURCE_NAME, "plugin dependency must include a version number for this source")
     }
 
     def "fail pluginRequests with SNAPSHOT versions"() {
@@ -59,7 +49,7 @@ class ArtifactRepositoriesPluginResolverTest extends Specification {
         resolver.resolve(request("plugin", "1.1-SNAPSHOT"), result)
 
         then:
-        1 * result.notFound("maven", "snapshot plugin versions are not supported")
+        1 * result.notFound(SOURCE_NAME, "snapshot plugin versions are not supported")
     }
 
     def "fail pluginRequests with dynamic versions"() {
@@ -67,6 +57,6 @@ class ArtifactRepositoriesPluginResolverTest extends Specification {
         resolver.resolve(request("plugin", "latest.revision"), result)
 
         then:
-        1 * result.notFound("maven", "dynamic plugin versions are not supported")
+        1 * result.notFound(SOURCE_NAME, "dynamic plugin versions are not supported")
     }
 }

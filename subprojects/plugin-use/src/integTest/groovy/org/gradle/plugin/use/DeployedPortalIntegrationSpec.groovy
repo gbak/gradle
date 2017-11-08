@@ -18,10 +18,9 @@ package org.gradle.plugin.use
 
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.test.fixtures.file.LeaksFileHandles
+import org.gradle.test.fixtures.plugin.PluginResolutionFailure
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
-
-import static org.hamcrest.Matchers.startsWith
 
 //These tests depend on https://plugins.gradle.org
 @Requires(TestPrecondition.ONLINE)
@@ -105,8 +104,8 @@ class DeployedPortalIntegrationSpec extends AbstractIntegrationSpec {
         fails("dependencies")
 
         and:
-        failureDescriptionStartsWith("Plugin [id: 'org.gradle.non-existing', version: '1.0'] was not found in any of the following sources:")
-        failureDescriptionContains("- Gradle Central Plugin Repository (Could not resolve plugin artifact 'org.gradle.non-existing:org.gradle.non-existing.gradle.plugin:1.0')")
+        new PluginResolutionFailure(failure, "org.gradle.non-existing", "1.0")
+            .assertIsArtifactResolutionFailure()
     }
 
     def "can resolve and plugin from portal with buildscript notation"() {
@@ -148,6 +147,7 @@ class DeployedPortalIntegrationSpec extends AbstractIntegrationSpec {
         fails "help"
 
         then:
-        failure.assertThatDescription(startsWith("Plugin [id: '$HELLO_WORLD_PLUGIN_ID', version: '$HELLO_WORLD_PLUGIN_VERSION'] was not found"))
+        def pluginFailure = new PluginResolutionFailure(failure, HELLO_WORLD_PLUGIN_ID, HELLO_WORLD_PLUGIN_VERSION)
+        pluginFailure.assertContainsArtifactResolutionFailureDescription()
     }
 }

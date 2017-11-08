@@ -35,6 +35,7 @@ import org.gradle.api.plugins.InvalidPluginException;
 import org.gradle.api.plugins.UnknownPluginException;
 import org.gradle.internal.classpath.CachedClasspathTransformer;
 import org.gradle.internal.classpath.ClassPath;
+import org.gradle.internal.exceptions.DefaultMultiCauseException;
 import org.gradle.internal.exceptions.LocationAwareException;
 import org.gradle.plugin.management.internal.PluginRequestInternal;
 import org.gradle.plugin.management.internal.PluginRequests;
@@ -43,10 +44,12 @@ import org.gradle.plugin.use.PluginId;
 import org.gradle.plugin.use.resolve.internal.AlreadyOnClasspathPluginResolver;
 import org.gradle.plugin.use.resolve.internal.PluginResolution;
 import org.gradle.plugin.use.resolve.internal.PluginResolutionResult;
+import org.gradle.plugin.use.resolve.internal.PluginResolutionResult.FailureProvider;
 import org.gradle.plugin.use.resolve.internal.PluginResolveContext;
 import org.gradle.plugin.use.resolve.internal.PluginResolver;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Formatter;
 import java.util.LinkedList;
@@ -257,12 +260,21 @@ public class DefaultPluginRequestApplicator implements PluginRequestApplicator {
         }
 
         if (!result.isFound()) {
-            String message = buildNotFoundMessage(request, result);
-            Exception exception = new UnknownPluginException(message);
+            UnknownPluginException exception = buildNotFoundException(request, result);
             throw new LocationAwareException(exception, request.getScriptDisplayName(), request.getLineNumber());
         }
 
         return result;
+    }
+
+    private UnknownPluginException buildNotFoundException(PluginRequestInternal pluginRequest, Result result) {
+        String message = buildNotFoundMessage(pluginRequest, result);
+        List<? extends Throwable> failures = result.collectFailures();
+        if (failures.isEmpty()) {
+            return new UnknownPluginException(message);
+        }
+        String stacktraceOnlyMessage = "Errors resolving plugin " + pluginRequest.getDisplayName();
+        return new UnknownPluginException(message, new DefaultMultiCauseException(stacktraceOnlyMessage, failures));
     }
 
     private String buildNotFoundMessage(PluginRequestInternal pluginRequest, Result result) {
@@ -271,7 +283,7 @@ public class DefaultPluginRequestApplicator implements PluginRequestApplicator {
             return String.format("Plugin %s was not found", pluginRequest.getDisplayName());
         } else {
             Formatter sb = new Formatter();
-            sb.format("Plugin %s was not found in any of the following sources:%n", pluginRequest.getDisplayName());
+            sb.format("Plugin %s was not found in any of the following sources:", pluginRequest.getDisplayName());
 
             for (NotFound notFound : result.notFoundList) {
                 sb.format("%n- %s", notFound.source);
@@ -287,10 +299,20 @@ public class DefaultPluginRequestApplicator implements PluginRequestApplicator {
     private static class NotFound {
         private final String source;
         private final String detail;
+        private final FailureProvider failureProvider;
 
-        private NotFound(String source, String detail) {
+        private NotFound(String source, String detail, @Nullable FailureProvider failureProvider) {
             this.source = source;
             this.detail = detail;
+            this.failureProvider = failureProvider;
+        }
+
+        @Nullable
+        public Throwable getFailure() {
+            if (failureProvider != null) {
+                return failureProvider.getFailure();
+            }
+            return null;
         }
     }
 
@@ -303,16 +325,35 @@ public class DefaultPluginRequestApplicator implements PluginRequestApplicator {
             this.request = request;
         }
 
+        @Override
         public void notFound(String sourceDescription, String notFoundDetail) {
-            notFoundList.add(new NotFound(sourceDescription, notFoundDetail));
+            notFoundList.add(new NotFound(sourceDescription, notFoundDetail, null));
         }
 
+        @Override
+        public void notFound(String sourceDescription, String notFoundDetail, FailureProvider failureProvider) {
+            notFoundList.add(new NotFound(sourceDescription, notFoundDetail, failureProvider));
+        }
+
+        @Override
         public void found(String sourceDescription, PluginResolution pluginResolution) {
             found = pluginResolution;
         }
 
+        @Override
         public boolean isFound() {
             return found != null;
+        }
+
+        List<? extends Throwable> collectFailures() {
+            List<Throwable> failures = new ArrayList<>(notFoundList.size());
+            for (NotFound notFound : notFoundList) {
+                Throwable failure = notFound.getFailure();
+                if (failure != null) {
+                    failures.add(failure);
+                }
+            }
+            return failures;
         }
     }
 }

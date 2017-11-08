@@ -20,9 +20,12 @@ import groovy.transform.NotYetImplemented
 import org.gradle.integtests.fixtures.AbstractDependencyResolutionTest
 import org.gradle.test.fixtures.Repository
 import org.gradle.test.fixtures.file.LeaksFileHandles
+import org.gradle.test.fixtures.ivy.IvyModule
 import org.gradle.test.fixtures.maven.MavenFileRepository
+import org.gradle.test.fixtures.maven.MavenModule
 import org.gradle.test.fixtures.maven.MavenRepository
 import org.gradle.test.fixtures.plugin.PluginBuilder
+import org.gradle.test.fixtures.plugin.PluginResolutionFailure
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
 import spock.lang.Unroll
@@ -179,17 +182,14 @@ class ResolvingFromSingleCustomPluginRepositorySpec extends AbstractDependencyRe
         """
 
         and:
-        def repoUrl = useCustomRepository(PathType.ABSOLUTE)
+        useCustomRepository(PathType.ABSOLUTE)
 
         when:
         fails("pluginTask")
 
         then:
-        failure.assertHasDescription("""Plugin [id: 'org.example.foo', version: '1.1'] was not found in any of the following sources:
-
-- Gradle Core Plugins (plugin is not in 'org.gradle' namespace)
-- ${repoType} (Could not resolve plugin artifact 'org.example.foo:org.example.foo.gradle.plugin:1.1')"""
-        )
+        new PluginResolutionFailure(failure, "org.example.foo", "1.1")
+            .assertIsArtifactResolutionFailure(repo)
 
         where:
         repoType << [IVY, MAVEN]
@@ -291,5 +291,42 @@ class ResolvingFromSingleCustomPluginRepositorySpec extends AbstractDependencyRe
 
         expect:
         fails("helloWorld")
+    }
+
+    @Unroll
+    def "Fails gracefully if a plugin transitive dependency is not found in #repoType repo"() {
+
+        given:
+        def testPlugin = publishTestPlugin(repoType)
+        if (repoType == MAVEN) {
+            (testPlugin.pluginModule as MavenModule).dependsOn("not", "found", "1.0").publishPom()
+        }
+        if (repoType == IVY) {
+            (testPlugin.pluginModule as IvyModule).dependsOn("not", "found", "1.0").publish()
+        }
+
+        and:
+        buildScript """
+          plugins {
+              id "org.example.plugin" version "1.0"
+          }
+        """
+
+        and:
+        useCustomRepository(PathType.ABSOLUTE)
+        settingsFile << "\nrootProject.name = 'root'"
+
+        when:
+        fails "buildEnvironment"
+
+        then:
+        // Not a plugin resolution failure, as marker artifacts are resolved non-transitively
+        // Regular buildscript classpath dependency resolution error instead
+        failure.assertHasDescription("A problem occurred configuring root project 'root'.")
+        failure.assertHasCause("Could not resolve all files for configuration ':classpath'.")
+        failure.assertHasCause("Could not find not:found:1.0.")
+
+        where:
+        repoType << [IVY, MAVEN]
     }
 }

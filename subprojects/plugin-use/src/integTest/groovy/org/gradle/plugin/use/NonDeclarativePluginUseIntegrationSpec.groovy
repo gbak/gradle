@@ -19,12 +19,10 @@ package org.gradle.plugin.use
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.test.fixtures.file.LeaksFileHandles
 import org.gradle.test.fixtures.plugin.PluginBuilder
+import org.gradle.test.fixtures.plugin.PluginResolutionFailure
 import org.gradle.test.fixtures.server.http.MavenHttpModule
 import org.gradle.test.fixtures.server.http.MavenHttpPluginRepository
 import org.junit.Rule
-
-import static org.hamcrest.Matchers.containsString
-import static org.hamcrest.Matchers.startsWith
 
 @LeaksFileHandles
 class NonDeclarativePluginUseIntegrationSpec extends AbstractIntegrationSpec {
@@ -236,9 +234,9 @@ class NonDeclarativePluginUseIntegrationSpec extends AbstractIntegrationSpec {
         fails "tasks"
 
         and:
-        failure.assertThatDescription(startsWith("Plugin [id: 'org.myplugin', version: '1.0'] was not found in any of the following sources"))
-        failure.assertThatDescription(containsString("Gradle Central Plugin Repository (Could not resolve plugin artifact 'org.myplugin:org.myplugin.gradle.plugin:1.0')"))
         failure.assertHasLineNumber(2)
+        new PluginResolutionFailure(failure, PLUGIN_ID, VERSION)
+            .assertIsArtifactResolutionFailure(pluginRepo)
     }
 
     def "failure due to plugin class is unloadable"() {

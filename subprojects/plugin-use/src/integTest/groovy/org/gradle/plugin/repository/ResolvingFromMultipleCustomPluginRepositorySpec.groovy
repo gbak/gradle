@@ -23,6 +23,7 @@ import org.gradle.test.fixtures.file.LeaksFileHandles
 import org.gradle.test.fixtures.maven.MavenFileRepository
 import org.gradle.test.fixtures.maven.MavenModule
 import org.gradle.test.fixtures.plugin.PluginBuilder
+import org.gradle.test.fixtures.plugin.PluginResolutionFailure
 import org.gradle.util.Requires
 import org.gradle.util.TestPrecondition
 import spock.lang.Issue
@@ -168,12 +169,8 @@ class ResolvingFromMultipleCustomPluginRepositorySpec extends AbstractDependency
         fails("pluginTask")
 
         then:
-        failure.assertHasDescription("""Plugin [id: 'org.example.foo', version: '1.1'] was not found in any of the following sources:
-
-- Gradle Core Plugins (plugin is not in 'org.gradle' namespace)
-- ${repoType} (Could not resolve plugin artifact 'org.example.foo:org.example.foo.gradle.plugin:1.1')
-- ${repoType}2 (Could not resolve plugin artifact 'org.example.foo:org.example.foo.gradle.plugin:1.1')"""
-        )
+        new PluginResolutionFailure(failure, "org.example.foo", "1.1")
+            .assertIsArtifactResolutionFailure(repoA, repoB)
 
         where:
         repoType << [IVY, MAVEN]
@@ -194,10 +191,8 @@ class ResolvingFromMultipleCustomPluginRepositorySpec extends AbstractDependency
         fails("helloWorld")
 
         then:
-        failure.assertThatDescription(containsNormalizedString("""
-- ${repoType} (Could not resolve plugin artifact 'org.gradle.hello-world:org.gradle.hello-world.gradle.plugin:0.2')
-- ${repoType}2 (Could not resolve plugin artifact 'org.gradle.hello-world:org.gradle.hello-world.gradle.plugin:0.2')"""
-        ))
+        new PluginResolutionFailure(failure, "org.gradle.hello-world", "0.2")
+            .assertIsArtifactResolutionFailure(repoA, repoB)
 
         where:
         repoType << [IVY, MAVEN]
