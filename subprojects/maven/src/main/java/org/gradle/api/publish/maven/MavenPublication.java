@@ -18,6 +18,8 @@ package org.gradle.api.publish.maven;
 
 import org.gradle.api.Action;
 import org.gradle.api.Incubating;
+import org.gradle.api.artifacts.MutableVersionConstraint;
+import org.gradle.api.artifacts.VersionConstraint;
 import org.gradle.api.component.SoftwareComponent;
 import org.gradle.api.publish.Publication;
 import org.gradle.internal.HasInternalProtocol;
@@ -254,13 +256,40 @@ public interface MavenPublication extends Publication {
     void setArtifactId(String artifactId);
 
     /**
-     * Returns the version for this publication.
+     * Returns the preferred version for this publication.
+     *
      */
     String getVersion();
 
     /**
-     * Sets the version for this publication.
+     * Sets the preferred version for this publication.
      */
     void setVersion(String version);
 
+    /**
+     * Gets the version constraint for this publication.
+     * @return the version constraint
+     *
+     * @since 4.4
+     */
+    @Incubating
+    VersionConstraint getVersionConstraint();
+
+    /**
+     * Configures the version constraint for this publication.
+     * @param constraint the version constraint
+     *
+     * @since 4.4
+     */
+    @Incubating
+    void version(Action<? super MutableVersionConstraint> constraint);
+
+    /**
+     * Sets the preferred version for this publication. This method is here for backwards compatibility
+     * because of the {@link #version(Action)} overload.
+     *
+     * @since 4.4
+     */
+    @Incubating
+    void version(String version);
 }

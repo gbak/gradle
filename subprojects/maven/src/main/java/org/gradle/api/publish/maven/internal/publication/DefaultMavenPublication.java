@@ -26,14 +26,17 @@ import org.gradle.api.artifacts.DependencyArtifact;
 import org.gradle.api.artifacts.ExcludeRule;
 import org.gradle.api.artifacts.ModuleDependency;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
+import org.gradle.api.artifacts.MutableVersionConstraint;
 import org.gradle.api.artifacts.ProjectDependency;
 import org.gradle.api.artifacts.PublishArtifact;
 import org.gradle.api.artifacts.PublishException;
+import org.gradle.api.artifacts.VersionConstraint;
 import org.gradle.api.attributes.Usage;
 import org.gradle.api.component.SoftwareComponent;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.internal.artifacts.DefaultExcludeRule;
 import org.gradle.api.internal.artifacts.DefaultModuleVersionIdentifier;
+import org.gradle.api.internal.artifacts.dependencies.DefaultMutableVersionConstraint;
 import org.gradle.api.internal.component.SoftwareComponentInternal;
 import org.gradle.api.internal.component.UsageContext;
 import org.gradle.api.internal.file.FileCollectionFactory;
@@ -87,6 +90,7 @@ public class DefaultMavenPublication implements MavenPublicationInternal {
     private final String name;
     private final MavenPomInternal pom;
     private final MavenProjectIdentity projectIdentity;
+    private final MutableVersionConstraint versionConstraint;
     private final DefaultMavenArtifactSet mavenArtifacts;
     private final Set<MavenDependencyInternal> runtimeDependencies = new LinkedHashSet<MavenDependencyInternal>();
     private final Set<MavenDependencyInternal> apiDependencies = new LinkedHashSet<MavenDependencyInternal>();
@@ -104,6 +108,7 @@ public class DefaultMavenPublication implements MavenPublicationInternal {
         this.projectIdentity = new DefaultMavenProjectIdentity(projectIdentity.getGroupId(), projectIdentity.getArtifactId(), projectIdentity.getVersion());
         mavenArtifacts = instantiator.newInstance(DefaultMavenArtifactSet.class, name, mavenArtifactParser, fileCollectionFactory);
         pom = instantiator.newInstance(DefaultMavenPom.class, this);
+        versionConstraint = new DefaultMutableVersionConstraint(projectIdentity.getVersion());
     }
 
     public String getName() {
@@ -173,7 +178,8 @@ public class DefaultMavenPublication implements MavenPublicationInternal {
     }
 
     private void addProjectDependency(ProjectDependency dependency, Set<MavenDependencyInternal> dependencies) {
-        ModuleVersionIdentifier identifier = projectDependencyResolver.resolve(dependency);
+        ProjectDependencyPublicationResolver.ProjectPublication publication = projectDependencyResolver.resolve(dependency);
+        ModuleVersionIdentifier identifier = publication.getIdentifier();
         dependencies.add(new DefaultMavenDependency(identifier.getGroup(), identifier.getName(), identifier.getVersion(), Collections.<DependencyArtifact>emptyList(), getExcludeRules(dependency)));
     }
 
@@ -221,11 +227,27 @@ public class DefaultMavenPublication implements MavenPublicationInternal {
     }
 
     public String getVersion() {
-        return projectIdentity.getVersion();
+        return versionConstraint.getPreferredVersion();
     }
 
     public void setVersion(String version) {
         projectIdentity.setVersion(version);
+        versionConstraint.prefer(version);
+    }
+
+    @Override
+    public void version(String version) {
+        setVersion(version);
+    }
+
+    @Override
+    public VersionConstraint getVersionConstraint() {
+        return versionConstraint;
+    }
+
+    @Override
+    public void version(Action<? super MutableVersionConstraint> constraint) {
+        constraint.execute(versionConstraint);
     }
 
     public FileCollection getPublishableFiles() {
@@ -356,9 +378,10 @@ public class DefaultMavenPublication implements MavenPublicationInternal {
 
     private String getArtifactFileName(String classifier, String extension) {
         StringBuilder artifactPath = new StringBuilder();
-        artifactPath.append(getCoordinates().getName());
+        ModuleVersionIdentifier coordinates = getCoordinates();
+        artifactPath.append(coordinates.getName());
         artifactPath.append('-');
-        artifactPath.append(getCoordinates().getVersion());
+        artifactPath.append(coordinates.getVersion());
         if (GUtil.isTrue(classifier)) {
             artifactPath.append('-');
             artifactPath.append(classifier);

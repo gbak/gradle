@@ -35,7 +35,25 @@ import java.util.Set;
  * For now is a simple implementation, but at some point could utilise components in the dependency project, usage in the referencing project, etc.
  */
 public class ProjectDependencyPublicationResolver {
-    public ModuleVersionIdentifier resolve(ProjectDependency dependency) {
+    public static class ProjectPublication {
+        private final ModuleVersionIdentifier identifier;
+        private final PublicationInternal backingPublication;
+
+        public ProjectPublication(ModuleVersionIdentifier identifier, PublicationInternal backingPublication) {
+            this.identifier = identifier;
+            this.backingPublication = backingPublication;
+        }
+
+        public ModuleVersionIdentifier getIdentifier() {
+            return identifier;
+        }
+
+        public PublicationInternal getBackingPublication() {
+            return backingPublication;
+        }
+    }
+
+    public ProjectPublication resolve(ProjectDependency dependency) {
         Project dependencyProject = dependency.getDependencyProject();
         ((ProjectInternal) dependencyProject).evaluate();
 
@@ -43,7 +61,7 @@ public class ProjectDependencyPublicationResolver {
 
         if (publishing == null || publishing.getPublications().withType(PublicationInternal.class).isEmpty()) {
             // Project does not apply publishing (or has no publications): simply use the project name in place of the dependency name
-            return new DefaultModuleVersionIdentifier(dependency.getGroup(), dependencyProject.getName(), dependency.getVersion());
+            return new ProjectPublication(new DefaultModuleVersionIdentifier(dependency.getGroup(), dependencyProject.getName(), dependency.getVersion()), null);
         }
 
         // Select all entry points. An entry point is a publication that does not contain a component whose parent is also published
@@ -64,7 +82,8 @@ public class ProjectDependencyPublicationResolver {
 
         // See if all entry points have the same identifier
         Iterator<? extends PublicationInternal> iterator = topLevel.iterator();
-        ModuleVersionIdentifier candidate = iterator.next().getCoordinates();
+        final PublicationInternal backingPublication = iterator.next();
+        ModuleVersionIdentifier candidate = backingPublication.getCoordinates();
         while (iterator.hasNext()) {
             ModuleVersionIdentifier alternative = iterator.next().getCoordinates();
             if (!candidate.equals(alternative)) {
@@ -79,7 +98,7 @@ public class ProjectDependencyPublicationResolver {
                 throw new UnsupportedOperationException(formatter.toString());
             }
         }
-        return candidate;
+        return new ProjectPublication(candidate, backingPublication);
 
     }
 }

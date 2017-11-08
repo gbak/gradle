@@ -26,6 +26,7 @@ import org.gradle.api.artifacts.ModuleDependency;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
 import org.gradle.api.artifacts.ProjectDependency;
 import org.gradle.api.artifacts.PublishArtifact;
+import org.gradle.api.artifacts.VersionConstraint;
 import org.gradle.api.attributes.Usage;
 import org.gradle.api.component.SoftwareComponent;
 import org.gradle.api.file.FileCollection;
@@ -169,7 +170,8 @@ public class DefaultIvyPublication implements IvyPublicationInternal {
     }
 
     private void addProjectDependency(ProjectDependency dependency, String confMapping) {
-        ModuleVersionIdentifier identifier = projectDependencyResolver.resolve(dependency);
+        ProjectDependencyPublicationResolver.ProjectPublication publication = projectDependencyResolver.resolve(dependency);
+        ModuleVersionIdentifier identifier = publication.getIdentifier();
         ivyDependencies.add(new DefaultIvyDependency(
                 identifier.getGroup(), identifier.getName(), identifier.getVersion(), confMapping, dependency.isTransitive(), Collections.<DependencyArtifact>emptyList(), dependency.getExcludeRules()));
     }
@@ -254,6 +256,11 @@ public class DefaultIvyPublication implements IvyPublicationInternal {
 
     public ModuleVersionIdentifier getCoordinates() {
         return new DefaultModuleVersionIdentifier(getOrganisation(), getModule(), getRevision());
+    }
+
+    @Override
+    public VersionConstraint getVersionConstraint() {
+        return null;
     }
 
     @Override

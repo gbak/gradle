@@ -293,7 +293,7 @@ public class DefaultMavenPublicationTest extends Specification {
 
         and:
         projectDependency.excludeRules >> []
-        projectDependencyResolver.resolve(projectDependency) >> DefaultModuleVersionIdentifier.newId("pub-group", "pub-name", "pub-version")
+        projectDependencyResolver.resolve(projectDependency) >> new ProjectDependencyPublicationResolver.ProjectPublication(DefaultModuleVersionIdentifier.newId("pub-group", "pub-name", "pub-version"), null)
 
         when:
         publication.from(componentWithDependency(projectDependency))

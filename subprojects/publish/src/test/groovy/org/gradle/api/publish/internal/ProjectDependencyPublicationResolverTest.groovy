@@ -184,7 +184,7 @@ Found the following publications in <project>:
     }
 
     private ModuleVersionIdentifier resolve() {
-        new ProjectDependencyPublicationResolver().resolve(projectDependency)
+        new ProjectDependencyPublicationResolver().resolve(projectDependency).identifier
     }
 
     private void dependentProjectHasPublications(PublicationInternal... added) {
