@@ -134,7 +134,7 @@ class EdgeState implements DependencyGraphEdge {
         targetNodeSelectionFailure = null;
         ComponentResolveMetadata targetModuleVersion = targetModuleRevision.getMetaData();
         if (targetModuleVersion == null) {
-            // Broken version
+            versionNotSpecified();
             return;
         }
 
@@ -151,6 +151,13 @@ class EdgeState implements DependencyGraphEdge {
             NodeState targetNodeState = resolveState.getNode(targetModuleRevision, targetConfiguration);
             this.targetNodes.add(targetNodeState);
         }
+    }
+
+    private void versionNotSpecified() {
+        String group = dependencyMetadata.getRequested().getGroup();
+        String name = dependencyMetadata.getRequested().getName();
+        targetNodeSelectionFailure = new ModuleVersionResolveException(dependencyMetadata.getSelector(),
+            "No valid version specified for '" + group + ":" + name + "'");
     }
 
     public ModuleExclusion toExclusions(DependencyMetadata md, ConfigurationMetadata from) {

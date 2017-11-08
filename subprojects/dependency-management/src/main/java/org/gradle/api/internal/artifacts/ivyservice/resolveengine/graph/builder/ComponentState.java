@@ -143,6 +143,9 @@ public class ComponentState implements ComponentResolutionState, ComponentResult
             metaData = idResolveResult.getMetaData();
             return true;
         }
+        if (idResolveResult.getModuleVersionId().getVersion().isEmpty()) {
+            return true;
+        }
         return false;
     }
 
